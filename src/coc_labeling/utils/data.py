@@ -40,7 +40,7 @@ def _extract_scene_id(scene_path: str) -> str:
     Returns:
         Scene id extracted from path (second-to-last component).
     """
-    return scene_path.split("/")[-2]
+    return scene_path.replace("\\", "/").split("/")[-2]
 
 
 def _get_data_index(dataset: UnifiedDataset) -> Iterable[DataIndexEntry]:

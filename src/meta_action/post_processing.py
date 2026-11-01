@@ -219,7 +219,7 @@ def process_batch(meta_action_dir: str, save_dir: str, num_workers: int) -> None
     clip_files, _ = io_utils.load_list_from_folder(meta_action_dir)
     clip_id_to_file: Dict[str, str] = {}
     for clip_file in clip_files:
-        clip_name = clip_file.split("/")[-1].split(".")[0]
+        clip_name = clip_file.replace("\\", "/").split("/")[-1].split(".")[0]
         clip_id_to_file[clip_name] = clip_file
     clip_ids = list(clip_id_to_file.keys())
     random.shuffle(clip_ids)
