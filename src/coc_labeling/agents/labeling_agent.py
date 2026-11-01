@@ -15,7 +15,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Any, cast
 
 from omegaconf import DictConfig
@@ -29,6 +31,8 @@ from coc_labeling.data_loader.segment_generators import (
 from coc_labeling.data_loader.vector_loader import VectorLoader
 from coc_labeling.data_loader.video_loader import VideoLoader
 from coc_labeling.model_clients.runtime_config import ModelRuntimeConfig
+
+LABELING_SUMMARY_FILE = "labeling_summary.json"
 
 
 class LabelingAgent:
@@ -159,6 +163,17 @@ class LabelingAgent:
 
         # loop through the remaining segments to be finished
         success_count = 0
+        failed_segments: list[dict[str, Any]] = []
+
+        def record_failure(error: Exception) -> None:
+            failed_segments.append(
+                {
+                    "clip_id": segment_info.clip_id,
+                    "event_start_timestamp": segment_info.event_start_timestamp,
+                    "error": str(error)[:1000],
+                }
+            )
+
         for segment_info in tqdm(segment_info_list, desc="Segment List Remaining"):
             logging.info(segment_info)
 
@@ -195,6 +210,7 @@ class LabelingAgent:
                             )
                         except (ValueError, IndexError, FileNotFoundError) as e:
                             logging.error(f"Error converting timestamp to index: {e}")
+                            record_failure(e)
                             continue
                         video_data = self.video_loader.load(
                             segment_data["clip_id"],
@@ -238,6 +254,7 @@ class LabelingAgent:
                     )
             except (AssertionError, FileNotFoundError) as e:
                 logging.error(f"video not found error: {e}")
+                record_failure(e)
                 continue
 
             if self.mode in ["vlm", "early_fusion", "llm"] and self.meta_action_loader is not None:
@@ -250,11 +267,20 @@ class LabelingAgent:
             try:
                 full_messages, output_dict = self.agent.run(segment_data, save_root=self.save_root)
                 success_count += 1
-            except Exception:
+            except Exception as e:
                 logging.exception("An error occurred during agent.run")
+                record_failure(e)
                 continue
 
         logging.info(
             f"Processed {success_count} / {len(segment_info_list)} segments successfully "
             f"from {self.cfg.data.segment_config_path}"
         )
+        # Failed segments do not stop the batch, so callers need this record to detect them.
+        summary = {
+            "total": len(segment_info_list),
+            "succeeded": success_count,
+            "failed": failed_segments,
+        }
+        summary_path = Path(self.save_root) / LABELING_SUMMARY_FILE
+        summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")

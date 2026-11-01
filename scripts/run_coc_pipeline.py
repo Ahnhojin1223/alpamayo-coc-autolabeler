@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +26,7 @@ STAGE_SCRIPTS = {
     3: "eval_stage3_coc_causal_vllm.py",
 }
 VALIDATION_MODES = ("cross", "same")
+LABELING_SUMMARY_FILE = "labeling_summary.json"
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -64,7 +64,9 @@ def backend_env(config: dict[str, Any], backend: str) -> dict[str, str]:
 
 
 def run_labeling(config: dict[str, Any], paths: dict[str, Path], backend: str) -> None:
-    """Generate CoC labels with one backend; existing labels for the segments are overwritten."""
+    """Generate CoC labels for the segments of one backend that do not have a label yet."""
+    summary_path = paths["output_dir"] / f"coc_{backend}" / LABELING_SUMMARY_FILE
+    summary_path.unlink(missing_ok=True)
     override = {
         "data.data_dir": paths["data_dir"],
         "data.cache_dir": paths["cache_dir"],
@@ -85,13 +87,31 @@ def run_labeling(config: dict[str, Any], paths: dict[str, Path], backend: str) -
         f"data_loader.vector.trajdata.num_workers={config['trajdata_num_workers']}",
         *(f"{key}='{value.as_posix()}'" for key, value in override.items()),
     ]
-    subprocess.run(command, check=True, cwd=REPO_ROOT, env=backend_env(config, backend))
+    result = subprocess.run(command, check=False, cwd=REPO_ROOT, env=backend_env(config, backend))
+    if result.returncode != 0 or not summary_path.exists():
+        # Keep the failure on disk so a later validation-only run cannot miss it.
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        error = f"labeling exited with code {result.returncode} before finishing"
+        summary_path.write_text(json.dumps({"error": error}), encoding="utf-8")
 
 
-def clear_stale_validation(paths: dict[str, Path], label_backend: str) -> None:
-    """Remove scores of replaced labels, which validation --resume would otherwise keep."""
-    for run_dir in (paths["output_dir"] / "validation").glob(f"{label_backend}_by_*"):
-        shutil.rmtree(run_dir)
+def labeling_problem(paths: dict[str, Path], backend: str) -> str | None:
+    """Describe why a backend's labels are incomplete; results without a summary are accepted."""
+    summary_path = paths["output_dir"] / f"coc_{backend}" / LABELING_SUMMARY_FILE
+    if not summary_path.exists():
+        return None
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if "error" in summary:
+        return summary["error"]
+    failed = summary["failed"]
+    if failed:
+        return f"{len(failed)}/{summary['total']} segments failed, see {summary_path}"
+    return None
+
+
+def has_labels(paths: dict[str, Path], backend: str) -> bool:
+    """Return whether a backend has at least one saved label to validate."""
+    return any((paths["output_dir"] / f"coc_{backend}").glob("*/cot_*.yaml"))
 
 
 def run_validation(
@@ -140,11 +160,21 @@ def main() -> int:
     if config["labeling"]["enabled"]:
         for backend in backends:
             run_labeling(config, paths, backend)
-            clear_stale_validation(paths, backend)
 
     all_ok = True
-    if config["validation"]["enabled"]:
-        for backend in backends:
+    for backend in backends:
+        problem = labeling_problem(paths, backend)
+        if problem:
+            # Failed segments have no label, so the saved ones can still be validated.
+            print(
+                f"coc_{backend}: {problem}. Re-run with labeling.enabled to finish.",
+                file=sys.stderr,
+            )
+            all_ok = False
+        if not has_labels(paths, backend):
+            print(f"coc_{backend}: no labels to validate.", file=sys.stderr)
+            all_ok = False
+        elif config["validation"]["enabled"]:
             for json_out, ok_rows, total_rows in run_validation(config, paths, backend):
                 print(f"{json_out}: {ok_rows}/{total_rows} rows ok")
                 all_ok = all_ok and total_rows > 0 and ok_rows == total_rows

@@ -354,8 +354,10 @@ applied, so compare label quality before mixing results with API runs.
 
 To set the model, thinking level, and same-model or cross-model validation in one
 place, edit `config/pipeline.json` and run `python scripts/run_coc_pipeline.py`.
-Set `labeling.enabled` to `false` to validate existing labels without regenerating
-them, because labeling overwrites existing results for the same segments.
+Labeling skips segments that already have a label and records failed segments in
+`labeling_summary.json`; the runner exits with an error until a re-run finishes them.
+To compare models or thinking levels, change `paths.output_dir`, because existing
+labels and validation scores in the same folder are kept.
 
 For Hugging Face local cache, optionally set:
 
