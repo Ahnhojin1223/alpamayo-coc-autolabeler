@@ -1,0 +1,33 @@
+{
+  "_options": {
+    "labeling.enabled": "true면 라벨을 새로 만들어 기존 라벨과 해당 검증 결과를 대체. false면 기존 라벨만 검증",
+    "labeling.backends": "CoC 라벨을 만들거나 검증할 대상 백엔드 목록: codex, claude_code",
+    "validation.mode": "cross: 상대 모델로 검증 (codex <-> claude_code), same: 라벨을 만든 모델로 검증",
+    "validation.stages": "1: 언급한 장면 요소 근거, 2: ego 행동 일치, 3: 인과 관계 일치",
+    "backends.*.model": "모델 이름. null이면 CLI 기본값",
+    "backends.codex.thinking": "low, medium, high, xhigh, max, ultra (ultra 지원은 모델별). null이면 CLI 기본값",
+    "backends.claude_code.thinking": "low, medium, high, xhigh, max. null이면 CLI 기본값"
+  },
+  "backends": {
+    "codex": { "model": "gpt-6.1-sol", "thinking": "low" },
+    "claude_code": { "model": "claude-opus-5-5", "thinking": "medium" }
+  },
+  "labeling": {
+    "enabled": false,
+    "backends": ["codex", "claude_code"]
+  },
+  "validation": {
+    "enabled": true,
+    "mode": "cross",
+    "stages": [1, 2, 3]
+  },
+  "paths": {
+    "data_dir": "results/test_dataset",
+    "cache_dir": "results/ing/trajdata_cache",
+    "video_dir": "results/ing/videos",
+    "meta_action_dir": "results/ing/meta_action/final_outputs",
+    "segment_config_path": "results/ing/keyframes/segments_test_subset.json",
+    "output_dir": "results"
+  },
+  "trajdata_num_workers": 2
+}

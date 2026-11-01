@@ -352,6 +352,11 @@ override the CLI's default model, and `CLAUDE_CLI_THINKING` or `CODEX_CLI_THINKI
 to override its thinking level. Sampling parameters and `max_tokens` are not
 applied, so compare label quality before mixing results with API runs.
 
+To set the model, thinking level, and same-model or cross-model validation in one
+place, edit `config/pipeline.json` and run `python scripts/run_coc_pipeline.py`.
+Set `labeling.enabled` to `false` to validate existing labels without regenerating
+them, because labeling overwrites existing results for the same segments.
+
 For Hugging Face local cache, optionally set:
 
 ```bash
