@@ -98,9 +98,13 @@ The evaluator uses the same `model_name` aliases as CoC autolabeling:
 - `qwen3.5_397b_fp8`
 - `gpt5`
 - `gpt5.5`
+- `claude_code` (Claude Code CLI signed in with a subscription)
+- `codex` (Codex CLI signed in with ChatGPT)
 
-Pass the alias with `--model-name`. The scripts auto-detect credentials and API
-endpoints using the same precedence as the autolabeler:
+Pass the alias with `--model-name`. The subscription CLI aliases use the CLI login
+instead of the API credentials below, and they receive sampled image frames. The
+scripts auto-detect credentials and API endpoints using the same precedence as the
+autolabeler:
 
 1. NVIDIA-hosted Azure OpenAI (`NVHOST_OAI_CLIENT_ID` +
    `NVHOST_OAI_CLIENT_SECRET`)

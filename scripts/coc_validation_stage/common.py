@@ -16,6 +16,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 try:
@@ -36,6 +37,13 @@ SUPPORTED_MODEL_NAMES = (
     "qwen3.5_397b_fp8",
     "gpt5",
     "gpt5.5",
+    "claude_code",
+    "codex",
+)
+SUBSCRIPTION_CLI_MODEL_NAMES = ("claude_code", "codex")
+# The stage prompts carry the full task; the CLIs still need a non-default system prompt.
+SUBSCRIPTION_CLI_SYSTEM_PROMPT = (
+    "You evaluate driving videos and follow the requested output format."
 )
 QWEN_HF_MODEL_MAP = {
     "qwen3_vl_235b_awq": "QuantTrio/Qwen3-VL-235B-A22B-Instruct-AWQ",
@@ -461,6 +469,44 @@ def is_qwen_model_name(model_name: str) -> bool:
     return model_name in QWEN_HF_MODEL_MAP
 
 
+class SubscriptionCliClient:
+    """Adapt a subscription CLI wrapper to the ``chat_completion`` client interface."""
+
+    def __init__(self, model_name: str) -> None:
+        repo_src = Path(__file__).resolve().parents[2] / "src"
+        if repo_src.is_dir() and str(repo_src) not in sys.path:
+            sys.path.insert(0, str(repo_src))
+        from coc_labeling.model_clients.vlm_wrappers.factory import create_model_wrapper
+
+        self.wrapper = create_model_wrapper(model_name)
+
+    def chat_completion(self, *, messages: list[dict[str, Any]], **_: Any) -> Any:
+        """Run one request; the CLIs do not accept sampling or token-limit parameters."""
+        content = [
+            part
+            if part["type"] == "text"
+            else {"type": "image", "data": part["image_url"]["url"].split(",", 1)[1]}
+            for part in messages[0]["content"]
+        ]
+        response = self.wrapper.infer(
+            [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": SUBSCRIPTION_CLI_SYSTEM_PROMPT}],
+                },
+                {"role": "user", "content": content},
+            ]
+        )
+        choice = SimpleNamespace(
+            finish_reason=response["finish_reason"],
+            message=SimpleNamespace(content=response["content"]),
+        )
+        usage_keys = ("prompt_tokens", "response_tokens", "reasoning_tokens")
+        return SimpleNamespace(
+            choices=[choice], model_usage={key: response[key] for key in usage_keys}
+        )
+
+
 def is_gpt_cloud_model_name(model_name: str) -> bool:
     """Return True when the model name is a cloud GPT alias."""
     return model_name in {"gpt5", "gpt5.5", "gpt-5", "gpt-5.5"}
@@ -522,6 +568,16 @@ def create_model_runtime(
     provider_model: str | None = None,
 ) -> ModelRuntime:
     """Create an evaluator runtime for the requested model."""
+    if model_name in SUBSCRIPTION_CLI_MODEL_NAMES:
+        return ModelRuntime(
+            client=SubscriptionCliClient(model_name),
+            model_name=model_name,
+            backend="subscription_cli",
+            omit_temperature=True,
+            qwen_disable_thinking=False,
+            default_temperature=None,
+        )
+
     from openai import OpenAI
 
     if is_qwen_model_name(model_name):
@@ -629,7 +685,10 @@ def create_model_runtime(
 def apply_model_defaults(args: argparse.Namespace) -> ModelRuntime | None:
     """Apply per-model defaults and build the runtime."""
     if getattr(args, "omit_temperature", None) is None:
-        args.omit_temperature = is_gpt_cloud_model_name(args.model_name)
+        args.omit_temperature = (
+            is_gpt_cloud_model_name(args.model_name)
+            or args.model_name in SUBSCRIPTION_CLI_MODEL_NAMES
+        )
     if getattr(args, "qwen_disable_thinking", None) is None:
         args.qwen_disable_thinking = is_qwen_model_name(args.model_name)
     if args.dry_run:
@@ -987,6 +1046,8 @@ def prepare_stage_video(
 
 def is_frame_based_vision_model(model: str) -> bool:
     """Return True when the model expects sampled image frames."""
+    if model in SUBSCRIPTION_CLI_MODEL_NAMES:
+        return True
     leaf = str(model).lower().replace("_", "-").rsplit("/", 1)[-1]
     return leaf.startswith("gpt-5") or leaf.startswith("gpt5") or "gemini" in leaf
 
@@ -1359,6 +1420,7 @@ def base_result_row(spec: StageSpec, row: NormalizedRow | None, raw_index: int) 
         "parse_error": None,
         "finish_reason": None,
         "max_tokens_used": None,
+        "model_usage": None,
     }
 
 
@@ -1483,6 +1545,7 @@ def run_stage(
             result["model_response_raw"] = raw_text
             result["finish_reason"] = finish_reason
             result["max_tokens_used"] = max_tokens_used
+            result["model_usage"] = getattr(resp, "model_usage", None)
             if parsed is None:
                 result["parse_error"] = parse_error
             else:
