@@ -21,8 +21,14 @@ from coc_labeling.model_clients.timeout import TIMEOUT_MAX
 from coc_labeling.model_clients.vlm_wrappers.cloud import OpenAIWrapper
 from coc_labeling.model_clients.vlm_wrappers.dummy import DummyWrapper
 from coc_labeling.model_clients.vlm_wrappers.qwen import QwenWrapper
+from coc_labeling.model_clients.vlm_wrappers.subscription_cli import (
+    ClaudeCodeWrapper,
+    CodexCliWrapper,
+)
 
 MODEL_WRAPPER_REGISTRY: dict[str, Type] = {
+    "claude_code": ClaudeCodeWrapper,
+    "codex": CodexCliWrapper,
     "dummy": DummyWrapper,
     "gpt5": OpenAIWrapper,
     "gpt5.5": OpenAIWrapper,

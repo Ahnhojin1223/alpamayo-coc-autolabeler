@@ -299,6 +299,8 @@ Supported `model_name` values in the current release:
 - `qwen3.5_397b_fp8`
 - `gpt5`
 - `gpt5.5`
+- `claude_code`
+- `codex`
 
 For label quality, the recommended `model_name` values are `gpt5.5` and
 `qwen3.5_397b_fp8`. For local-only runs, start with `qwen3.5_397b_fp8` when
@@ -339,6 +341,16 @@ export NVHOST_OAI_CLIENT_SECRET="your_client_secret"
 
 Credential precedence is NVIDIA-hosted Azure OpenAI first, then NVIDIA
 inference, then standard OpenAI.
+
+For personal runs against a Claude or ChatGPT subscription instead of an API key,
+use `model_name=claude_code` or `model_name=codex` after signing in with
+`claude auth login` or `codex login`. These backends call the installed CLI and
+ignore API-key environment variables, so usage counts against the subscription
+limits. The CLI is found through `CLAUDE_CLI_PATH`/`CODEX_CLI_PATH`, then `PATH`,
+then the VS Code extension bundle. Set `CLAUDE_CLI_MODEL` or `CODEX_CLI_MODEL` to
+override the CLI's default model, and `CLAUDE_CLI_THINKING` or `CODEX_CLI_THINKING`
+to override its thinking level. Sampling parameters and `max_tokens` are not
+applied, so compare label quality before mixing results with API runs.
 
 For Hugging Face local cache, optionally set:
 

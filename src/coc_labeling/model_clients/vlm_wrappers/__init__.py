@@ -23,9 +23,15 @@ from coc_labeling.model_clients.vlm_wrappers.factory import (
     create_model_wrapper,
 )
 from coc_labeling.model_clients.vlm_wrappers.qwen import QwenWrapper
+from coc_labeling.model_clients.vlm_wrappers.subscription_cli import (
+    ClaudeCodeWrapper,
+    CodexCliWrapper,
+)
 
 __all__ = [
     "BaseWrapper",
+    "ClaudeCodeWrapper",
+    "CodexCliWrapper",
     "DummyWrapper",
     "OpenAIWrapper",
     "QwenWrapper",
